@@ -1,75 +1,60 @@
 provider "google" {
   project = var.project_id
-  region  = var.region
 }
 
-data "google_compute_zones" "this" {
-  region = var.region
-  project = var.project_id
-}
+# ---------------------------------------------------------------------
+# controllers 
 
-locals {
-  type = ["public", "private"]
-  zones = data.google_compute_zones.this.names
-}
-
-# VPC
-resource "google_compute_network" "vpc" {
-  name = "${var.name}-vpc"
+# vpc
+resource "google_compute_network" "vpc-controllers" {
+  name = "${var.name}-vpc-controllers"
   auto_create_subnetworks = false
+  
 }
 
-# SUBNET
-resource "google_compute_subnetwork" "vpc-subnet" {
-  # count = 1
-  # name="${var.name}-${local.type[count.index]}-subnetwork"
-  name="${var.name}-subnetwork"
-  # ip_cidr_range = var.subnet_ip_cidr_range[count.index]
-  ip_cidr_range = var.subnet_ip_cidr_range
-  network=google_compute_network.vpc.id
+# subnet
+resource "google_compute_subnetwork" "vpc-subnet-controllers" {
+  name = "${var.name}-vpc-subnetwork-controllers"
+  region = var.region-controllers
+  ip_cidr_range = var.controllers_cidr_range
+  network = google_compute_network.vpc-controllers.id
 }
 
-# # VPC FIREWALL
-# resource "google_compute_firewall" "vpc-allow-internal-firewall" {
-#   name = "${var.name}-vpc-allow-internal-firewall"
-#   network = google_compute_network.vpc.id
-#   allow {
-#     protocol = "tcp"
-#   }
-#
-#   allow {
-#     protocol = "udp"
-#   }
-#
-#   allow {
-#     protocol = "icmp"
-#   }
-#
-#   source_ranges = var.subnet_ip_cidr_range 
-# }
-#
-# resource "google_compute_firewall" "vpc-allow-external-firewall" {
-#   name = "${var.name}-vpc-allow-external-firewall"
-#   network = google_compute_network.vpc.id
-#   allow {
-#     protocol = "tcp"
-#     ports = ["22", "6443"]
-#   }
-#   
-#   allow {
-#     protocol = "icmp"
-#   }
-#   
-#   source_ranges = ["0.0.0.0/0"]
-# }
-#
-# # LB public ip address
-# resource "google_compute_address" "public-lb-ip-address" {
-#   name = "${var.name}-public-lb-ip-address"
-#   region = var.region
-# }
+# firewalls
+resource "google_compute_firewall" "vpc-internal-firewall-controllers" {
+  name = "${var.name}-vpc-internal-firewall-controllers"
+  network = google_compute_network.vpc-controllers.id
+  allow {
+    protocol = "tcp"
+  }
 
-# controllers
+  allow {
+    protocol = "udp"
+  }
+
+  allow {
+    protocol = "icmp"
+  }
+
+  source_ranges = [var.controllers_cidr_range] 
+}
+
+resource "google_compute_firewall" "vpc-external-firewall-controllers" {
+  name = "${var.name}-vpc-external-firewall-controllers"
+  network = google_compute_network.vpc-controllers.id
+  allow {
+    protocol = "tcp"
+    ports = ["22", "6443"]
+  }
+  
+  allow {
+    protocol = "icmp"
+  }
+  
+  source_ranges = ["0.0.0.0/0"]
+}
+
+# compute engines
 resource "google_compute_instance" "controllers" {
   count = 3
   name = "controller-${count.index}"
@@ -82,9 +67,8 @@ resource "google_compute_instance" "controllers" {
   }
   
   machine_type = "e2-standard-2"
-  
   network_interface {
-    subnetwork = google_compute_subnetwork.vpc-subnet.name
+    subnetwork = google_compute_subnetwork.vpc-subnet-controllers.name
     network_ip = "10.240.0.1${count.index}"
   }
 
@@ -101,10 +85,61 @@ resource "google_compute_instance" "controllers" {
     ]
   }
 
-  zone = "us-central1-a"
+  zone = "${var.region-controllers}-a"
 }
 
+# -------------------------------------------------------------------
 # workers
+
+# vpc
+resource "google_compute_network" "vpc-workers" {
+  name = "${var.name}-vpc-workers"
+  auto_create_subnetworks = false
+}
+
+# subnet
+resource "google_compute_subnetwork" "vpc-subnet-workers" {
+  name = "${var.name}-vpc-subnetwork-workers"
+  region = var.region-workers
+  ip_cidr_range = var.workers_cidr_range
+  network = google_compute_network.vpc-workers.id
+}
+
+# firewalls
+resource "google_compute_firewall" "vpc-internal-firewall-workers" {
+  name = "${var.name}-vpc-internal-firewall-workers"
+  network = google_compute_network.vpc-workers.id
+  allow {
+    protocol = "tcp"
+  }
+
+  allow {
+    protocol = "udp"
+  }
+
+  allow {
+    protocol = "icmp"
+  }
+
+  source_ranges = [var.workers_cidr_range] 
+}
+
+resource "google_compute_firewall" "vpc-external-firewall-workers" {
+  name = "${var.name}-vpc-external-firewall-workers"
+  network = google_compute_network.vpc-workers.id
+  allow {
+    protocol = "tcp"
+    ports = ["22", "6443"]
+  }
+  
+  allow {
+    protocol = "icmp"
+  }
+  
+  source_ranges = ["0.0.0.0/0"]
+}
+
+# compute engines
 resource "google_compute_instance" "workers" {
   count = 3
   name = "worker-${count.index}"
@@ -117,15 +152,15 @@ resource "google_compute_instance" "workers" {
   }
   
   machine_type = "e2-standard-2"
-  
   network_interface {
-    subnetwork = google_compute_subnetwork.vpc-subnet.name
-    network_ip = "10.240.0.2${count.index}"
+    subnetwork = google_compute_subnetwork.vpc-subnet-workers.name
+    network_ip = "10.250.0.1${count.index}"
   }
   
   metadata = {
-    pod-cidr = "10.200.${count.index}.0/24"
+    pod-cidr = "10.250.${count.index}.0/24"
   }
+
   can_ip_forward = true
   tags = ["kubernetes-the-hard-way", "worker"]
   service_account {
@@ -139,13 +174,33 @@ resource "google_compute_instance" "workers" {
     ]
   }
 
-  zone = "us-east1-b"
+  zone = "${var.region-workers}-b"
 }
 
-# # Outputs
-# output "public-lb-ip-address" {
-#   value = google_compute_address.public-lb-ip-address.address
-# }
+resource "google_compute_network_peering" "vpc-controllers-peering" {
+  name = "vpc-controllers-peering"
+  network = google_compute_network.vpc-controllers.self_link
+  peer_network = google_compute_network.vpc-workers.self_link
+}
 
+resource "google_compute_network_peering" "vpc-workers-peering" {
+  name = "vpc-workers-peering"
+  network = google_compute_network.vpc-workers.self_link
+  peer_network = google_compute_network.vpc-controllers.self_link
+}
+
+# --------------------------------------------------------
+
+# LB public ip address
+resource "google_compute_address" "public-lb-ip-address" {
+  name = "${var.name}-public-lb-ip-address"
+  region = var.region
+}
+
+# Outputs
+output "public-lb-ip-address" {
+  value = google_compute_address.public-lb-ip-address.address
+}
 
 # https://medium.com/@Sakib_Hossain/vpc-peering-with-two-virtual-machines-in-two-different-regions-on-google-cloud-platform-gcp-7dc5f0c4e67d
+

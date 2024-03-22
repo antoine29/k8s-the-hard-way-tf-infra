@@ -4,10 +4,16 @@ variable "project_id" {
   default = "gke-test-412223"
 }
 
-variable "region" {
+variable "region-controllers" {
   type = string
-  description = "Region for this infrastructure"
+  description = "Region for controllers"
   default = "us-central1"
+}
+
+variable "region-workers" {
+  type = string
+  description = "Region for workers"
+  default = "us-east1"
 }
 
 variable "name" {
@@ -16,12 +22,15 @@ variable "name" {
   default = "kubernetes-the-hard-way"
 }
 
-variable "subnet_ip_cidr_range" {
-  # type=list(string)
-  # description="List of The range of internal addresses that are owned by this subnetwork."
-  # default=["10.240.0.0/24"]
+variable "controllers_cidr_range" {
   type=string
-  description="The range of internal addresses that are owned by this subnetwork."
+  description="The range of internal addresses for controllers subnetwork"
   default="10.240.0.0/24"
+}
+
+variable "workers_cidr_range" {
+  type=string
+  description="The range of internal addresses for workers subnetwork"
+  default="10.250.0.0/24"
 }
 

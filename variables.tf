@@ -16,6 +16,12 @@ variable "region-workers" {
   default = "us-east1"
 }
 
+variable "region-test" {
+  type = string
+  description = "Region for testing"
+  default = "us-west1"
+}
+
 variable "name" {
   type = string
   description = "Name for this infrastructure"

@@ -2,6 +2,7 @@
 resource "google_compute_network" "vpc-test" {
   name = "${var.name}-vpc-test"
   auto_create_subnetworks = false
+  # delete_default_routes_on_create = true
 }
 
 # subnet
@@ -12,39 +13,16 @@ resource "google_compute_subnetwork" "vpc-subnet-test" {
   network = google_compute_network.vpc-test.id
 }
 
-# firewalls
-#resource "google_compute_firewall" "vpc-internal-firewall-workers" {
-#  name = "${var.name}-vpc-internal-firewall-workers"
-#  network = google_compute_network.vpc-workers.id
-#  allow {
-#    protocol = "tcp"
-#  }
-#
-#  allow {
-#    protocol = "udp"
-#  }
-#
-#  allow {
-#    protocol = "icmp"
-#  }
-#
-#  source_ranges = [var.workers_cidr_range] 
-#}
-#
-#resource "google_compute_firewall" "vpc-external-firewall-workers" {
-#  name = "${var.name}-vpc-external-firewall-workers"
-#  network = google_compute_network.vpc-workers.id
-#  allow {
-#    protocol = "tcp"
-#    ports = ["22", "6443"]
-#  }
-#  
-#  allow {
-#    protocol = "icmp"
-#  }
-#  
-#  source_ranges = ["0.0.0.0/0"]
-#}
+resource "google_compute_firewall" "vpc-ssh-firewall-rule" {
+ name = "${var.name}-vpc-ssh-firewall-rule"
+ network = google_compute_network.vpc-test.id
+ allow {
+   protocol = "tcp"
+   ports = ["22"]
+ }
+ 
+ source_ranges = ["0.0.0.0/0"]
+}
 
 # compute engines
 resource "google_compute_instance" "testers" {
@@ -82,5 +60,23 @@ resource "google_compute_instance" "testers" {
   }
 
   zone = "${var.region-test}-b"
+}
+
+resource "google_compute_router" "router" {
+  project = var.project_id
+  name    = "nat-router"
+  network = google_compute_network.vpc-test.id
+  region  = var.region-test
+}
+
+module "cloud-nat" {
+  source  = "terraform-google-modules/cloud-nat/google"
+  version = "~> 5.0"
+
+  project_id                          = var.project_id
+  region                              = var.region-test
+  router                              = google_compute_router.router.name
+  name                                = "nat-config"
+  source_subnetwork_ip_ranges_to_nat  = "ALL_SUBNETWORKS_ALL_IP_RANGES"
 }
 
